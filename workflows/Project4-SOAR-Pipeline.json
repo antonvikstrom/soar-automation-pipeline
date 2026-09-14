@@ -1,0 +1,773 @@
+{
+  "name": "Project4-SOAR-Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "splunk-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        -304
+      ],
+      "id": "99ef0481-4409-4a35-87e8-753e744090dd",
+      "name": "Webhook",
+      "webhookId": "insert-your-webhook-id-here"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst rawLog = $json.body.result._raw || $json.body.result.log || $json.body.log || \"\";\n\n// Extract IP dynamically; mark as \"Unknown\" if parsing fails completely\nconst srcIp = $json.body.result.src_ip \n  || rawLog.match(/(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})/)?.[1] \n  || \"Unknown\";\n\nconst uri = rawLog.match(/\"GET\\s+([^\\s]+)/)?.[1] || \"Unknown\";\n\nconst payload = {\n  raw_log: rawLog,\n  extracted_ip: srcIp,\n  extracted_uri: uri,\n  timestamp: new Date().toISOString()\n};\n\nfs.writeFileSync('/app/input.json', JSON.stringify(payload, null, 2));\n\nreturn { json: payload };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -304
+      ],
+      "id": "58652f37-f80b-4bc2-84bb-99897ceaf48f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "command": "/app/bin/docker run --rm -v /home/tonies/project4-soar-pipeline:/app python:3.11-slim python3 /app/sandbox_analyzer.py /app/input.json"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -304
+      ],
+      "id": "2e209e3e-85ec-4dc7-8d79-de47ef12dbcd",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $json.stdout || \"{}\";\nconst parsed = JSON.parse(stdout);\n\nreturn {\n  json: {\n    ...parsed,\n    extracted_ip: $('Code in JavaScript').first().json.extracted_ip,\n    extracted_uri: $('Code in JavaScript').first().json.extracted_uri,\n    raw_log: $('Code in JavaScript').first().json.raw_log\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        -304
+      ],
+      "id": "9606b8d7-7914-42aa-9b50-7d766d7179c8",
+      "name": "Parse Sandbox JSON"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4fce2eeb-dbfb-4366-80da-5302413aa11b",
+              "leftValue": "={{ $json.is_malicious }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        656,
+        -304
+      ],
+      "id": "b9ad5fd9-2f19-4db4-95b2-bac550f43e4e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $json.content[0].text || \"{}\";\nconst cleanedText = rawText.replace(/```json\\n?|\\n?```/g, '').trim();\nconst parsed = JSON.parse(cleanedText);\n\nreturn {\n  json: {\n    ...parsed,\n    attacker_ip: $('Parse Sandbox JSON').first().json.extracted_ip,\n    target_uri: $('Parse Sandbox JSON').first().json.extracted_uri,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -304
+      ],
+      "id": "aeda177f-9bca-4693-932b-93168ced51b3",
+      "name": "Parse Claude Report"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  json: {\n    status: \"BENIGN_LOGGED\",\n    action_taken: \"None\",\n    incident_level: \"LOW\",\n    details: \"Payload evaluated as non-malicious by sandbox analyzer.\",\n    extracted_ip: $('Parse Sandbox JSON').first().json.extracted_ip || \"N/A\",\n    extracted_uri: $('Parse Sandbox JSON').first().json.extracted_uri || \"N/A\",\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        -16
+      ],
+      "id": "3c5b2fd9-5d98-4307-b5cb-775c00ea9888",
+      "name": "Log Benign Event"
+    },
+    {
+      "parameters": {
+        "url": "https://10.x.x.x/api/v2/firewall/alias?id=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "insert-your-api-key-here"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        -384
+      ],
+      "id": "8b7513fc-31d8-4b31-bf1e-9be192a7e15a",
+      "name": "Get SOAR Blocklist"
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = $('Get SOAR Blocklist').first().json.data.address || [];\nconst attackerIp = $('Parse Claude Report').first().json.attacker_ip;\n\nconst updatedList = Array.from(new Set([...existing, attackerIp]));\n\nreturn {\n  json: {\n    id: $('Get SOAR Blocklist').first().json.data.id,\n    address: updatedList,\n    attacker_ip: attackerIp,\n    already_blocked: existing.includes(attackerIp)\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        -352
+      ],
+      "id": "d8fe055f-2bdc-474d-b1fc-acfb81284c5f",
+      "name": "Merge Attacker IP"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://10.x.x.x/api/v2/firewall/alias",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "insert-your-api-key-here"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"id\": {{ $('Merge Attacker IP').first().json.id }},\n  \"address\": {{ JSON.stringify($('Merge Attacker IP').first().json.address) }},\n  \"apply\": true\n}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3120,
+        -400
+      ],
+      "id": "38d52f32-ec8f-4d16-8374-af1b09e3f942",
+      "name": "Update SOAR Blocklist"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bb60df2b-b43d-4198-bab4-acb947f1d7f9",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "^(CRITICAL|HIGH|Medium)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2000,
+        -304
+      ],
+      "id": "9ca5eec3-83d2-4129-9461-0b40c1fb206f",
+      "name": "Severity Gate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5c525caa-0734-4bc0-9983-e0be7023a981",
+              "leftValue": "={{ $json.already_blocked }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2896,
+        -448
+      ],
+      "id": "dd362a60-aa5e-44e3-8edd-cd21c03930ef",
+      "name": "Skip If Already Blocked"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sandbox = $('Parse Sandbox JSON').first().json;\n\nreturn {\n  json: {\n    status: \"ALREADY_BLOCKED\",\n    action_taken: \"None (IP already in blocklist)\",\n    incident_level: sandbox.risk_score >= 100 ? \"CRITICAL\" : \"UNKNOWN\",\n    details: \"Attacker IP already present in SOAR_Blocklist alias; skipped before Claude API call.\",\n    attacker_ip: $json.attacker_ip,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        -624
+      ],
+      "id": "ab4b0340-e68b-44f8-9feb-7a61c50d4699",
+      "name": "Log Already-Blocked Event"
+    },
+    {
+      "parameters": {
+        "jsCode": "const existing = $json.data.address || [];\nconst attackerIp = $('Parse Sandbox JSON').first().json.extracted_ip;\n\nreturn {\n  json: {\n    attacker_ip: attackerIp,\n    already_blocked: existing.includes(attackerIp)\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        -384
+      ],
+      "id": "26174e50-1c75-4a41-8007-599a001ad028",
+      "name": "Check Early Block Status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5cc94e73-5295-4e5a-9253-de6e019ba03d",
+              "leftValue": "={{ $json.already_blocked }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1328,
+        -384
+      ],
+      "id": "1339d8c4-d6d0-48aa-af61-7c2b20117dda",
+      "name": "Early Block Gate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    \"model\": \"claude-sonnet-4-5\",\n    \"max_tokens\": 500,\n    \"system\": \"You are a Tier 3 SOC Analyst. Analyze the following sandboxed alert data. Output your analysis strictly as a JSON object with no markdown formatting or extra text. Use these exact keys: 'severity', 'mitre_technique', 'incident_summary', and 'remediation_action'.\",\n    \"messages\": [\n      {\n        \"role\": \"user\",\n        \"content\": \"Analyze this alert data: \" + JSON.stringify($json)\n      }\n    ]\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1552,
+        -304
+      ],
+      "id": "3d9abe1f-ab7e-431a-b061-5f87f6bdb86c",
+      "name": "HTTP Request (Claude)",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "NGrBS4xBJgDc2khT",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAndWait",
+        "guildId": {
+          "__rl": true,
+          "value": "1548263962389254216",
+          "mode": "list",
+          "cachedResultName": "SOC-Automation-Lab",
+          "cachedResultUrl": "https://discord.com/channels/1548263962389254216"
+        },
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1548264015350992896"
+        },
+        "message": "=🚨 **SOAR Alert - Approval Required**\n\n**Severity:** {{ $('Parse Claude Report').item.json.severity }}\n**MITRE Technique:** {{ $('Parse Claude Report').item.json.mitre_technique }}\n**Attacker IP:** {{ $json.attacker_ip }}\n**Target URI:** {{ $('Parse Claude Report').item.json.target_uri }}\n**Summary:** {{ $('Parse Claude Report').item.json.incident_summary }}\n**Recommended Action:** {{ $('Parse Claude Report').item.json.remediation_action }}\n\nApprove firewall block on this IP?",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        -352
+      ],
+      "id": "644e2a3d-93dc-4b63-bbb3-bddc7db748e9",
+      "name": "Send message and wait for response",
+      "webhookId": "insert-your-webhook-id-here",
+      "credentials": {
+        "discordBotApi": {
+          "id": "insert-your-discord-bot-credential-id-here",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f07b1ef1-ab6e-4603-8b40-0d9292f4c902",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2672,
+        -352
+      ],
+      "id": "4963a23f-7edf-4aa8-b15e-7c9d0ef23c3d",
+      "name": "Approval Decision Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  json: {\n    status: \"BLOCK_DENIED\",\n    action_taken: \"None (human declined firewall block)\",\n    attacker_ip: $('Merge Attacker IP').first().json.attacker_ip,\n    severity: $('Parse Claude Report').first().json.severity,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3344,
+        -208
+      ],
+      "id": "5c4a33fe-8f43-43ef-895f-d4ef0cc0f8d1",
+      "name": "Log Denied Block"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://10.x.x.x:8088/services/collector/event",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Splunk insert-your-splunk-hec-token-here"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"index\": \"soar_audit\",\n  \"sourcetype\": \"_json\",\n  \"event\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3568,
+        -304
+      ],
+      "id": "02132371-ff94-4a49-84e1-99ecc054afc6",
+      "name": "Send to Splunk"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  json: {\n    status: \"BLOCK_APPLIED\",\n    action_taken: \"Firewall block applied to SOAR_Blocklist\",\n    attacker_ip: $('Merge Attacker IP').first().json.attacker_ip,\n    severity: $('Parse Claude Report').first().json.severity,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3344,
+        -400
+      ],
+      "id": "771b9327-94d2-404c-9c63-86520eae1454",
+      "name": "Log Approved Block"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Parse Sandbox JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sandbox JSON": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get SOAR Blocklist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Benign Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Claude Report": {
+      "main": [
+        [
+          {
+            "node": "Severity Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get SOAR Blocklist": {
+      "main": [
+        [
+          {
+            "node": "Check Early Block Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Attacker IP": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Severity Gate": {
+      "main": [
+        [
+          {
+            "node": "Merge Attacker IP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Benign Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip If Already Blocked": {
+      "main": [
+        [
+          {
+            "node": "Update SOAR Blocklist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Already-Blocked Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Early Block Status": {
+      "main": [
+        [
+          {
+            "node": "Early Block Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Early Block Gate": {
+      "main": [
+        [
+          {
+            "node": "Log Already-Blocked Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request (Claude)": {
+      "main": [
+        [
+          {
+            "node": "Parse Claude Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "Approval Decision Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Decision Gate": {
+      "main": [
+        [
+          {
+            "node": "Skip If Already Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Denied Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Denied Block": {
+      "main": [
+        [
+          {
+            "node": "Send to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update SOAR Blocklist": {
+      "main": [
+        [
+          {
+            "node": "Log Approved Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Benign Event": {
+      "main": [
+        [
+          {
+            "node": "Send to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Already-Blocked Event": {
+      "main": [
+        [
+          {
+            "node": "Send to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Approved Block": {
+      "main": [
+        [
+          {
+            "node": "Send to Splunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Europe/Stockholm",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "de936001-de59-4cd1-86c3-abf6af9c1930",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "44ad86d2e99b1e51a05dd82bab949549f55c54482a01b523d11d38672432c993"
+  },
+  "nodeGroups": [],
+  "id": "B3XgRClj9fbsOU4x",
+  "tags": []
+}

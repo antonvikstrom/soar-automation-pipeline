@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    user: "1000:110"
+    environment:
+      - N8N_USER_FOLDER=/home/node
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/tonies/project4-soar-pipeline:/app
+
+volumes:
+  n8n_data:
