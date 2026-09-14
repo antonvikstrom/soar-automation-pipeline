@@ -26,6 +26,8 @@ Splunk Webhook → n8n Ingestion → Docker Python Sandbox
                                                        Splunk Audit Writeback
 ```
 
+![/Users/antonvikstrom/Documents/areas/projects/GitHub/soar-automation-pipeline/assets/n8n-complete-pipeline.png](assets/n8n-complete-pipeline.png)
+
 ## 🛠️ Quick Start
 
 1. **Clone the repository:**
@@ -39,11 +41,18 @@ Splunk Webhook → n8n Ingestion → Docker Python Sandbox
    docker compose up -d
    ```
 
-3. **Import the workflow:** Open n8n at `http://10.1.1.60:5678`, import `workflows/Project4-SOAR-Pipeline.json` and activate it.
+3. **Import the workflow:** Open n8n in your browser, import
+   `workflows/Project4-SOAR-Pipeline.json` and activate it.
 
 4. **Deploy the sandbox analyzer:** Place `sandbox_analyzer.py` in the mounted `/app` directory.
 
 5. **Configure upstream triggers:** Point your Splunk webhook alert action at n8n's production webhook URL.
+
+> **⚠️ Before running:** The workflow JSON contains placeholders
+> (`insert-your-api-key-here`, `insert-your-webhook-id-here`,
+> `your-hec-token-here`, `10.x.x.x`). Replace these with your
+> own pfSense REST API key, Splunk HEC token, Discord credentials,
+> and actual host IP addresses before activating the workflow.
 
 ## 📂 Repository Layout
 
