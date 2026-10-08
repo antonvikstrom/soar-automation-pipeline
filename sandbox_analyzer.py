@@ -1,21 +1,23 @@
 import sys
 import json
+from urllib.parse import unquote
 
 def analyze_payload(raw_log):
+    log = unquote(raw_log).lower()
     score = 0
     findings = []
     
-    if ".." in raw_log:
+    if ".." in log:
         score += 40
         findings.append("Directory traversal sequence detected ('..')")
         
     sensitive_files = ["/etc/passwd", "/etc/shadow", "web.config", "boot.ini"]
     for target in sensitive_files:
-        if target in raw_log:
+        if target in log:
             score += 50
             findings.append(f"Sensitive file access targeted ({target})")
             
-    if "python-requests" in raw_log or "curl" in raw_log:
+    if "python-requests" in log or "curl" in log:
         score += 10
         findings.append("Automated attack tool User-Agent identified")
 

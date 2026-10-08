@@ -100,16 +100,10 @@ def test_empty_log():
     assert result["risk_score"] == 0
     assert result["is_malicious"] is False
 
-
-# --- Known gaps (expected to fail until the analyzer is improved) -----------
-
-@pytest.mark.xfail(reason="URL-encoded traversal (%2e%2e%2f) is not decoded before matching", strict=True)
 def test_url_encoded_traversal_is_detected():
     result = analyze_payload("GET /?page=%2e%2e%2f%2e%2e%2fetc%2fpasswd")
     assert result["is_malicious"] is True
 
-
-@pytest.mark.xfail(reason="Matching is case-sensitive, so 'Curl' or '/ETC/PASSWD' slip through", strict=True)
 def test_matching_is_case_insensitive():
     result = analyze_payload("GET /?file=/ETC/PASSWD")
     assert result["is_malicious"] is True
