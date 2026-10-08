@@ -65,6 +65,8 @@ Splunk Webhook → n8n Ingestion → Docker Python Sandbox
 
 ## 🔑 Key Design Principles
 
+Full design, guardrails and change process: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
 **Pre-LLM suppression.** A local Python sandbox scores every alert before it reaches Claude. Benign events and already-blocked IPs are filtered out early, saving API costs and reducing noise.
 
 **Human-in-the-loop before destructive action.** No firewall block happens automatically. Every high-severity alert posts to a dedicated Discord channel with Approve/Decline buttons, and the n8n workflow pauses until a human responds.
