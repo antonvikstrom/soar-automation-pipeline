@@ -1,3 +1,6 @@
 .env
 input.json
 n8n_data/
+.pytest_cache/
+.venv/
+__pycache__/
